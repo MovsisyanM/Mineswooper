@@ -9,12 +9,12 @@ def print_map(mine_values, n):
     """Prints the map to the screen"""
  
     print()
-    print("Mineswooper")
+    print("Mineswooper by Mher Movsisyan, Diana Sargsyan, and Lilit Beglaryan")
     print()
  
     st = "   "
     for i in range(n):
-        st = st + "     " + str(i + 1)
+        st = st + str(i + 1).rjust(6)
     print(st)   
  
     for r in range(n):
@@ -29,7 +29,7 @@ def print_map(mine_values, n):
             st = st + "|     "
         print(st + "|")
          
-        st = "  " + str(r + 1) + "  "
+        st = str(r + 1).ljust(5)
         for col in range(n):
             st = st + "|  " + str(mine_values[r][col]) + "  "
         print(st + "|") 
@@ -189,10 +189,10 @@ def show_mines(mine_values, numbers, n):
 if __name__ == "__main__":
     #
     # Size of grid
-    n = 8
+    n = 20
     
     # Number of mines
-    mines_no = 8
+    mines_no = 40
  
     # The actual values of the grid
     numbers = [[0 for y in range(n)] for x in range(n)] 
@@ -311,7 +311,7 @@ if __name__ == "__main__":
         if [r, col] in flags:
             flags.remove([r, col])
  
-        # If landing on a mine --- GAME OVER    
+        # If landing on a mine, blow up    
         if numbers[r][col] == -1:
             mine_values[r][col] = 'M'
             mine_values = show_mines(mine_values, numbers, n)
