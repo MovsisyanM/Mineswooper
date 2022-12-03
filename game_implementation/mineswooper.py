@@ -1,9 +1,13 @@
+from itertools import permutations
+import matplotlib.pyplot as plt
+from time import sleep
 from sys import platform
 import random
 import os
 
 # thanks to https://www.askpython.com/python/examples/create-minesweeper-using-python 
 # for guiding us through the implementation of the game
+
  
 def print_map(mine_values, n):
     """Prints the map to the screen"""
@@ -42,10 +46,10 @@ def print_map(mine_values, n):
     print()
   
 # Function for setting up Mines
-def set_mines(numbers, mines_no, n):
+def set_mines(numbers, n_mines, n):
     # Track of number of mines already set up
     count = 0
-    while count < mines_no:
+    while count < n_mines:
  
         # Random number from all possible grid positions 
         val = random.randint(0, n*n-1)
@@ -98,47 +102,6 @@ def set_values(numbers, n):
                 
     return numbers
  
-# Recursive function to display all zero-valued neighbours  
-def neighbours(r, col):
-     
-    global mine_values
-    global numbers
-    global vis
- 
-    # If the cell already not visited
-    if [r,col] not in vis:
- 
-        # Mark the cell visited
-        vis.append([r,col])
- 
-        # If the cell is zero-valued
-        if numbers[r][col] == 0:
- 
-            # Display it to the user
-            mine_values[r][col] = numbers[r][col]
- 
-            # Recursive calls for the neighbouring cells
-            if r > 0:
-                neighbours(r-1, col)
-            if r < n-1:
-                neighbours(r+1, col)
-            if col > 0:
-                neighbours(r, col-1)
-            if col < n-1:
-                neighbours(r, col+1)    
-            if r > 0 and col > 0:
-                neighbours(r-1, col-1)
-            if r > 0 and col < n-1:
-                neighbours(r-1, col+1)
-            if r < n-1 and col > 0:
-                neighbours(r+1, col-1)
-            if r < n-1 and col < n-1:
-                neighbours(r+1, col+1)  
- 
-        # If the cell is not zero-valued            
-        if numbers[r][col] != 0:
-                mine_values[r][col] = numbers[r][col]
- 
 # Function for clearing the terminal
 def clear():
     if platform in ["linux", "linux2", "darwin"]:
@@ -156,7 +119,7 @@ def instructions():
 def check_over():
     global mine_values
     global n
-    global mines_no
+    global n_mines
  
     # Count of all numbered values
     count = 0
@@ -170,7 +133,7 @@ def check_over():
                 count = count + 1
      
     # Count comparison          
-    if count == n * n - mines_no:
+    if count == n * n - n_mines:
         return True
     else:
         return False
@@ -178,21 +141,118 @@ def check_over():
 # Display all the mine locations                    
 def show_mines(mine_values, numbers, n):
  
-    for r in range(n):
+    for row in range(n):
         for col in range(n):
-            if numbers[r][col] == -1:
-                mine_values[r][col] = 'M'
+            if numbers[row][col] == -1:
+                mine_values[row][col] = 'M'
     
     return mine_values
  
+
+def get_adj_coords(row, col, n):
+    u_rows = []
+    if row != 0:
+        u_rows += [row - 1]
+    u_rows += [row]
+    if row != n - 1:
+        u_rows += [row + 1]
+    
+    u_cols = []
+    if col != 0:
+        u_cols += [col - 1]
+    u_cols += [col]
+    if col != n - 1:
+        u_cols += [col + 1]
+        
+    pairs = [(r, c) for r in u_rows for c in u_cols]
+    if (row, col) in pairs:
+        pairs.remove((row, col))
+        
+    return pairs
+
+
  
+def solve(i, n, n_mines, mine_values, flags, unopeneds, vis, tovis):
+    # Opening up corner as first step (childhood habit of Mher)
+    if i == 0:
+        return "1 1"
+    
+    # check if all mines are found
+    if n_mines == len(flags):
+        input("Done artificially intelligencing this game. Press enter to exit")
+        
+    
+    for row, col in vis:
+        if mine_values[row][col] == 0:
+            # uncover safe squares
+            for pair in unopeneds[row][col]:
+                return f"{pair[0] + 1} {pair[1] + 1}"
+        elif mine_values[row][col] == len(unopeneds[row][col]):
+            # if unopened squares = indicator, flag as mine
+            f_row, f_col = unopeneds[row][col][-1]
+            return f"{f_row + 1} {f_col + 1} f"
+        else:
+            for row_2, col_2 in set(vis).intersection(set(get_adj_coords(row, col, n))).difference(set([(row, col)])):
+                # only look at different pairs
+                
+                # If unopened squares are subset of another visited numbered square
+                if set(unopeneds[row][col]).intersection(set(unopeneds[row_2][col_2])) == set(unopeneds[row][col]) and \
+                    len(unopeneds[row][col]) > 0 and \
+                        mine_values[row_2][col_2] > 0:
+                    f_row, f_col = unopeneds[row_2][col_2][-1]
+                    return f"{f_row + 1} {f_col + 1} f"
+        
+    # if number of unopened squares matches the number of missing mines, flag em all
+    if len(tovis) == n_mines - len(flags):
+        f_row, f_col = tovis[row][col][-1]
+        return f"{f_row + 1} {f_col + 1} f"
+    
+    # free up corners before brute-forcing, avoids worst case in most cases
+    if i == 1:
+        return f"{n} {n}"
+    elif i == 2:
+        return f"{1} {n}"
+    elif i == 3:
+        return f"{n} {1}"
+    
+    mines_left = (n_mines - len(flags))
+    multiverse = {}
+    
+    # Brute force through remaining squares
+    for perm in permutations(([-1]*mines_left) + ([0] * (len(tovis) - mines_left))):
+        # Simulate mine placement
+        hypothesis_world = [[0 for c in range(n)] for r in range(n)]
+        for sq_id in range(len(tovis)):
+            hypothesis_world[tovis[sq_id][row]][tovis[sq_id][col]] = perm[sq_id]
+            
+        # calculate indicators
+        hypothesis_world = set_values(hypothesis_world, n)
+        
+        try:
+            for hypo_row, hypo_col in vis:
+                assert (hypothesis_world[hypo_row][hypo_col] >= 0) and hypothesis_world[hypo_row][hypo_col] == mine_values[hypo_row][hypo_col], \
+                "Inconsistent universe model"
+        except AssertionError as e:
+            continue # skip permutation, since we noticed an inconsistency
+        
+        # increment dangerous block counts of the multiverse
+        for sq_id in range(len(tovis)):
+            multiverse[tovis[sq_id]] -= perm[sq_id]
+            
+    least_dangerous = min(multiverse, key=ages.get)
+    return f"{least_dangerous[0] + 1} {least_dangerous[1] + 1}"
+
+
+
 if __name__ == "__main__":
-    #
+    
+    # region Init
+    
     # Size of grid
-    n = 20
+    n = 10
     
     # Number of mines
-    mines_no = 40
+    n_mines = 10
  
     # The actual values of the grid
     numbers = [[0 for y in range(n)] for x in range(n)] 
@@ -200,22 +260,52 @@ if __name__ == "__main__":
     mine_values = [[' ' for y in range(n)] for x in range(n)]
     # The positions that have been flagged
     flags = []
+    
+    vis = []
+    tovis = [(r, c) for r in range(n) for c in range(n)]
+    
+    # keeping track of unopened neighbors for each block
+    _unopeneds = [[[(row-1, col-1), (row-1, col), (row-1, col+1),
+                      (row,   col-1),               (row,   col+1),
+                      (row+1, col-1), (row+1, col), (row+1, col+1),] 
+                    for col in range(n)] for row in range(n)]
+    
+    unopeneds = [[[]for col in range(n)] for row in range(n)]
+    for row in range(n):
+        for col in range(n):
+            for unopened in _unopeneds[row][col]:
+                if (-1 in unopened) or (21 in unopened):
+                    continue # removing unopened squares outside of border bounds
+                unopeneds[row][col].append(unopened)
  
     # Set the mines and values
-    numbers = set_mines(numbers, mines_no, n)
+    numbers = set_mines(numbers, n_mines, n)
     numbers = set_values(numbers, n)
  
     # Display the instructions
     instructions()
     incorrect_msg = "Invalid input"
+    
+    # endregion Init
          
     # Game loop
+    i = 0
     over = False
     while not over:
+        for u_row, u_col in flags:
+            if type(mine_values[u_row][u_col]) is int and mine_values[u_row][u_col] > 0:
+                mine_values[u_row][u_col] -= 1
+            
         print_map(mine_values, n)
  
-        # Input from the user
-        inp = input("Enter row number followed by space and column number = ").lower()
+        # Input from the AI
+        inp = solve(i, n, n_mines, mine_values, flags, unopeneds, vis, tovis)
+        print()
+        print("Got input:" + inp)
+        print()
+        sleep(0.5)
+        # inp = input("Input your move:")
+        i += 1
         if inp == "exit":
             exit()
             
@@ -235,13 +325,13 @@ if __name__ == "__main__":
  
         # Flag input
         elif len(inp) == 3:
-            if inp[2] != 'F' and inp[2] != 'f':
+            if inp[2].lower() != 'f':
                 clear()
                 print(incorrect_msg)
                 instructions()
                 continue
  
-            # Try block to handle errant input  
+            # handle errant input  
             try:
                 val = list(map(int, inp[:2]))
             except ValueError:
@@ -274,7 +364,7 @@ if __name__ == "__main__":
                 continue
  
             # Check the number for flags    
-            if len(flags) < mines_no:
+            if len(flags) < n_mines:
                 clear()
                 print("Flag set")
  
@@ -283,6 +373,26 @@ if __name__ == "__main__":
                  
                 # Set the flag for display
                 mine_values[r][col] = 'F'
+                
+                # identifying adjascent squares
+                u_pairs = get_adj_coords(r, col, n)
+                
+                for u_row, u_col in u_pairs:
+                    if type(mine_values[u_row][u_col]) is int and mine_values[u_row][u_col] > 0:
+                        mine_values[u_row][u_col] -= 1
+                
+                
+                
+                if (r, col) not in vis:
+                    # adding to visited list
+                    vis.append((r, col))
+                    # removing from to visit list
+                    tovis.remove((r, col))
+                        
+                    # removing "unopened" status of current square from adjascent squares
+                    for u_row, u_col in u_pairs:
+                        unopeneds[u_row][u_col].remove((r, col))
+                
                 continue
             else:
                 clear()
@@ -304,31 +414,39 @@ if __name__ == "__main__":
             continue
              
         # Get row and column number
-        r = val[0]-1
+        row = val[0]-1
         col = val[1]-1
  
         # Unflag the cell if already flagged
-        if [r, col] in flags:
-            flags.remove([r, col])
+        if [row, col] in flags:
+            flags.remove([row, col])
  
         # If landing on a mine, blow up    
-        if numbers[r][col] == -1:
-            mine_values[r][col] = 'M'
+        if numbers[row][col] == -1:
+            mine_values[row][col] = 'M'
             mine_values = show_mines(mine_values, numbers, n)
             print_map(mine_values, n)
             print("Landed on a mine, ended up with an arrow to the knee... better luck next time")
             over = True
             continue
- 
-        # If landing on a cell with 0 mines in neighboring cells
-        elif numbers[r][col] == 0:
-            vis = []
-            mine_values[r][col] = '0'
-            neighbours(r, col)
- 
         # If selecting a cell with atleast 1 mine in neighboring cells  
         else:   
-            mine_values[r][col] = numbers[r][col]
+            # registering move by displaying number
+            mine_values[row][col] = numbers[row][col]
+            if (row, col) not in vis:
+                # adding to visited list
+                vis.append((row, col))
+                # removing from to visit list
+                tovis.remove((row, col))
+            
+                # identifying adjascent squares
+                u_pairs = get_adj_coords(row, col, n)
+                    
+                # removing "unopened" status of current square from adjascent squares
+                for u_row, u_col in u_pairs:
+                    unopeneds[u_row][u_col].remove((row, col))
+            
+            
  
         # Check for game completion 
         if(check_over()):
