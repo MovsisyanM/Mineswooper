@@ -175,56 +175,72 @@ def get_adj_coords(row, col, n):
 
  
 def solve(i, n, n_mines, mine_values, flags, unopeneds, vis, tovis):
-    global subsets
+    global subsets, unopened
     # Opening up corner as first step (childhood habit of Mher)
     if i == 0:
         return "1 1"
+
     
     # check if all mines are found
     if n_mines == len(flags):
         input("Done artificially intelligencing this game. Press enter to exit")
         
-    
+
     for row, col in vis:
         if mine_values[row][col] == 0:
             # uncover safe squares
             for pair in unopeneds[row][col]:
                 return f"{pair[0] + 1} {pair[1] + 1}"
 
+
     for row, col in vis:
-        if mine_values[row][col] == len(unopeneds[row][col]):
+        if (mine_values[row][col] == len(unopeneds[row][col])) and mine_values[row][col] > 0:
             # if unopened squares = indicator, flag as mine
             f_row, f_col = unopeneds[row][col][-1]
             return f"{f_row + 1} {f_col + 1} f"
         
-    for row, col in vis:
-        # only look at different pairs
-        for row_2, col_2 in set(vis).intersection(set(get_adj_coords(row, col, n))):
-            
-            # If unopened squares are subset of another visited numbered square
-            if set(unopeneds[row][col]).intersection(set(unopeneds[row_2][col_2])) == set(unopeneds[row][col]) and \
-                len(unopeneds[row][col]) > 0 and \
-                    type(mine_values[row_2][col_2]) is int and \
-                    type(mine_values[row][col]) is int and \
-                    mine_values[row_2][col_2] > 0 and \
-                    mine_values[row][col] > 0:
-                f_row, f_col = unopeneds[row_2][col_2][-1]
 
-                subsets.append(((row_2, col_2), mine_values[row][col]))
-                return f"{f_row + 1} {f_col + 1} f"
+    try:
+        if len(vis) > 1:
+            for row, col in vis:
+                # only look at different 2-adjascent pairs
+                for row_2, col_2 in set(vis):
+                    if row_2 > row + 2 or row_2 < row - 2 or col_2 > col + 2 or col_2 < col - 2:
+                        continue 
+                    
+                    # If unopened squares are subset of another visited numbered square
+                    if set(unopeneds[row][col]).intersection(set(unopeneds[row_2][col_2])) == set(unopeneds[row][col]) and \
+                        len(unopeneds[row][col]) > 0 and \
+                            type(mine_values[row_2][col_2]) is int and \
+                            type(mine_values[row][col]) is int and \
+                            mine_values[row_2][col_2] > 0 and \
+                            mine_values[row][col] > 0:
+                        f_row, f_col = unopeneds[row_2][col_2][-1]
+
+                        subsets.append(((row_2, col_2), mine_values[row][col]))
+                        if (row_2, col_2) in unopeneds[row_2][col_2]:
+                            unopeneds[row_2][col_2].remove((row_2, col_2))
+
+                        raise StopIteration()
+    except StopIteration as e:
+        return "0 0" # Return errant input to update state
+                
+
+                    # return f"{f_row + 1} {f_col + 1} f"
         
     # if number of unopened squares matches the number of missing mines, flag em all
-    if len(tovis) == n_mines - len(flags):
+    if len(tovis) == (n_mines - len(flags)):
         f_row, f_col = tovis[row][col][-1]
         return f"{f_row + 1} {f_col + 1} f"
     
     # free up corners before brute-forcing, avoids worst case in most cases
-    if i == 1:
-        return f"{n} {n}"
-    elif i == 2:
-        return f"{1} {n}"
-    elif i == 3:
-        return f"{n} {1}"
+    if i <= 12:
+        if (n-1, n-1) in tovis:
+            return f"{n} {n}"
+        elif (0, n-1) in tovis:
+            return f"{1} {n}"
+        elif (n-1, 0) in tovis:
+            return f"{n} {1}"
     
     mines_left = (n_mines - len(flags))
     multiverse = {}
@@ -271,6 +287,8 @@ if __name__ == "__main__":
     mine_values = [[' ' for y in range(n)] for x in range(n)]
     # The positions that have been flagged
     flags = []
+    accounted_flags = []
+    accounted_subsets = []
     
     vis = []
     tovis = [(r, c) for r in range(n) for c in range(n)]
@@ -285,7 +303,7 @@ if __name__ == "__main__":
     for row in range(n):
         for col in range(n):
             for unopened in _unopeneds[row][col]:
-                if (-1 in unopened) or (21 in unopened):
+                if (-1 in unopened) or (n in unopened):
                     continue # removing unopened squares outside of border bounds
                 unopeneds[row][col].append(unopened)
  
@@ -303,14 +321,22 @@ if __name__ == "__main__":
     i = 0
     over = False
     while not over:
-        for u_row, u_col in flags:
-            if type(mine_values[u_row][u_col]) is int and mine_values[u_row][u_col] > 0:
-                mine_values[u_row][u_col] -= 1
+        for row, col in flags:
+            for u_row, u_col in get_adj_coords(row, col, n):
+                if ((row, col), (u_row, u_col)) in accounted_flags:
+                    continue
+                if type(mine_values[u_row][u_col]) is int and mine_values[u_row][u_col] > 0:
+
+                    mine_values[u_row][u_col] -= 1
+                    accounted_flags.append(((row, col), (u_row, u_col)))
         
         for coords, dec_num in subsets:
+            if (row, col) in accounted_subsets:
+                continue
             u_row, u_col = coords
             if type(mine_values[u_row][u_col]) is int and mine_values[u_row][u_col] > 0:
                 mine_values[u_row][u_col] -= 1
+                accounted_subsets.append(coords)
 
             
         print_map(mine_values, n)
@@ -320,7 +346,7 @@ if __name__ == "__main__":
         print()
         print("Got input:" + inp)
         print()
-        sleep(0.5)
+        sleep(0.2)
         # inp = input("Input your move:")
         i += 1
         if inp == "exit":
@@ -391,13 +417,6 @@ if __name__ == "__main__":
                 # Set the flag for display
                 mine_values[r][col] = 'F'
                 
-                # identifying adjascent squares
-                u_pairs = get_adj_coords(r, col, n)
-                
-                for u_row, u_col in u_pairs:
-                    if type(mine_values[u_row][u_col]) is int and mine_values[u_row][u_col] > 0:
-                        mine_values[u_row][u_col] -= 1
-                
                 
                 
                 if (r, col) not in vis:
@@ -405,9 +424,13 @@ if __name__ == "__main__":
                     vis.append((r, col))
                     # removing from to visit list
                     tovis.remove((r, col))
-                        
-                    # removing "unopened" status of current square from adjascent squares
-                    for u_row, u_col in u_pairs:
+
+                # identifying adjascent squares
+                u_pairs = get_adj_coords(r, col, n)
+                    
+                # removing "unopened" status of current square from adjascent squares
+                for u_row, u_col in u_pairs:
+                    if (r, col) in unopeneds[u_row][u_col]:
                         unopeneds[u_row][u_col].remove((r, col))
                 
                 continue
