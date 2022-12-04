@@ -8,6 +8,8 @@ import os
 # thanks to https://www.askpython.com/python/examples/create-minesweeper-using-python 
 # for guiding us through the implementation of the game
 
+subsets = []
+
  
 def print_map(mine_values, n):
     """Prints the map to the screen"""
@@ -173,6 +175,7 @@ def get_adj_coords(row, col, n):
 
  
 def solve(i, n, n_mines, mine_values, flags, unopeneds, vis, tovis):
+    global subsets
     # Opening up corner as first step (childhood habit of Mher)
     if i == 0:
         return "1 1"
@@ -187,20 +190,28 @@ def solve(i, n, n_mines, mine_values, flags, unopeneds, vis, tovis):
             # uncover safe squares
             for pair in unopeneds[row][col]:
                 return f"{pair[0] + 1} {pair[1] + 1}"
-        elif mine_values[row][col] == len(unopeneds[row][col]):
+
+    for row, col in vis:
+        if mine_values[row][col] == len(unopeneds[row][col]):
             # if unopened squares = indicator, flag as mine
             f_row, f_col = unopeneds[row][col][-1]
             return f"{f_row + 1} {f_col + 1} f"
-        else:
-            for row_2, col_2 in set(vis).intersection(set(get_adj_coords(row, col, n))).difference(set([(row, col)])):
-                # only look at different pairs
-                
-                # If unopened squares are subset of another visited numbered square
-                if set(unopeneds[row][col]).intersection(set(unopeneds[row_2][col_2])) == set(unopeneds[row][col]) and \
-                    len(unopeneds[row][col]) > 0 and \
-                        mine_values[row_2][col_2] > 0:
-                    f_row, f_col = unopeneds[row_2][col_2][-1]
-                    return f"{f_row + 1} {f_col + 1} f"
+        
+    for row, col in vis:
+        # only look at different pairs
+        for row_2, col_2 in set(vis).intersection(set(get_adj_coords(row, col, n))):
+            
+            # If unopened squares are subset of another visited numbered square
+            if set(unopeneds[row][col]).intersection(set(unopeneds[row_2][col_2])) == set(unopeneds[row][col]) and \
+                len(unopeneds[row][col]) > 0 and \
+                    type(mine_values[row_2][col_2]) is int and \
+                    type(mine_values[row][col]) is int and \
+                    mine_values[row_2][col_2] > 0 and \
+                    mine_values[row][col] > 0:
+                f_row, f_col = unopeneds[row_2][col_2][-1]
+
+                subsets.append(((row_2, col_2), mine_values[row][col]))
+                return f"{f_row + 1} {f_col + 1} f"
         
     # if number of unopened squares matches the number of missing mines, flag em all
     if len(tovis) == n_mines - len(flags):
@@ -239,7 +250,7 @@ def solve(i, n, n_mines, mine_values, flags, unopeneds, vis, tovis):
         for sq_id in range(len(tovis)):
             multiverse[tovis[sq_id]] -= perm[sq_id]
             
-    least_dangerous = min(multiverse, key=ages.get)
+    least_dangerous = min(multiverse, key=multiverse.get)
     return f"{least_dangerous[0] + 1} {least_dangerous[1] + 1}"
 
 
@@ -295,6 +306,12 @@ if __name__ == "__main__":
         for u_row, u_col in flags:
             if type(mine_values[u_row][u_col]) is int and mine_values[u_row][u_col] > 0:
                 mine_values[u_row][u_col] -= 1
+        
+        for coords, dec_num in subsets:
+            u_row, u_col = coords
+            if type(mine_values[u_row][u_col]) is int and mine_values[u_row][u_col] > 0:
+                mine_values[u_row][u_col] -= 1
+
             
         print_map(mine_values, n)
  
