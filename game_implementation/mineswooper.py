@@ -5,6 +5,8 @@ from sys import platform
 import random
 import os
 
+from tqdm import tqdm
+
 # thanks to https://www.askpython.com/python/examples/create-minesweeper-using-python 
 # for guiding us through the implementation of the game
 
@@ -179,7 +181,6 @@ def solve(i, n, n_mines, mine_values, flags, unopeneds, vis, tovis):
     # Opening up corner as first step (childhood habit of Mher)
     if i == 0:
         return "1 1"
-
     
     # check if all mines are found
     if n_mines == len(flags):
@@ -194,8 +195,9 @@ def solve(i, n, n_mines, mine_values, flags, unopeneds, vis, tovis):
 
 
     for row, col in vis:
-        if (mine_values[row][col] == len(unopeneds[row][col])) and mine_values[row][col] > 0:
-            # if unopened squares = indicator, flag as mine
+        # if unopened squares = indicator, flag as mine
+        if (mine_values[row][col] == len(unopeneds[row][col])) and \
+                mine_values[row][col] > 0:
             f_row, f_col = unopeneds[row][col][-1]
             return f"{f_row + 1} {f_col + 1} f"
         
@@ -210,16 +212,18 @@ def solve(i, n, n_mines, mine_values, flags, unopeneds, vis, tovis):
                     
                     # If unopened squares are subset of another visited numbered square
                     if set(unopeneds[row][col]).intersection(set(unopeneds[row_2][col_2])) == set(unopeneds[row][col]) and \
-                        len(unopeneds[row][col]) > 0 and \
                             type(mine_values[row_2][col_2]) is int and \
                             type(mine_values[row][col]) is int and \
                             mine_values[row_2][col_2] > 0 and \
-                            mine_values[row][col] > 0:
-                        f_row, f_col = unopeneds[row_2][col_2][-1]
+                            mine_values[row][col] > 0 and \
+                            len(unopeneds[row][col]) < len(unopeneds[row_2][col_2]):
 
+                        # schedule to decrement value
                         subsets.append(((row_2, col_2), mine_values[row][col]))
-                        if (row_2, col_2) in unopeneds[row_2][col_2]:
-                            unopeneds[row_2][col_2].remove((row_2, col_2))
+                        
+                        # remove constraints from second square
+                        for r, c in unopeneds[row][col]:
+                            unopeneds[row_2][col_2].remove((r, c))
 
                         raise StopIteration()
     except StopIteration as e:
@@ -246,25 +250,31 @@ def solve(i, n, n_mines, mine_values, flags, unopeneds, vis, tovis):
     multiverse = {}
     
     # Brute force through remaining squares
-    for perm in permutations(([-1]*mines_left) + ([0] * (len(tovis) - mines_left))):
+    for perm in tqdm(permutations(([-1]*mines_left) + ([0] * (len(tovis) - mines_left)))):
         # Simulate mine placement
         hypothesis_world = [[0 for c in range(n)] for r in range(n)]
         for sq_id in range(len(tovis)):
-            hypothesis_world[tovis[sq_id][row]][tovis[sq_id][col]] = perm[sq_id]
-            
+            hypothesis_world[tovis[sq_id][0]][tovis[sq_id][1]] = perm[sq_id]
+                
         # calculate indicators
         hypothesis_world = set_values(hypothesis_world, n)
         
         try:
             for hypo_row, hypo_col in vis:
-                assert (hypothesis_world[hypo_row][hypo_col] >= 0) and hypothesis_world[hypo_row][hypo_col] == mine_values[hypo_row][hypo_col], \
+                assert (hypothesis_world[hypo_row][hypo_col] >= 0) and \
+                    (hypothesis_world[hypo_row][hypo_col] == (
+                        mine_values[hypo_row][hypo_col] + \
+                        sum([1 if ((hypo_row, hypo_col) in contents) else 0 for contents in accounted_flags]))), \
                 "Inconsistent universe model"
         except AssertionError as e:
             continue # skip permutation, since we noticed an inconsistency
         
         # increment dangerous block counts of the multiverse
         for sq_id in range(len(tovis)):
-            multiverse[tovis[sq_id]] -= perm[sq_id]
+            if tovis[sq_id] in multiverse.keys():
+                multiverse[tovis[sq_id]] -= perm[sq_id]
+            else:
+                multiverse[tovis[sq_id]] = -perm[sq_id]
             
     least_dangerous = min(multiverse, key=multiverse.get)
     return f"{least_dangerous[0] + 1} {least_dangerous[1] + 1}"
@@ -276,6 +286,9 @@ if __name__ == "__main__":
     # region Init
     
     # Size of grid
+    seed = random.randint(1, 10000)
+    # seed = 5601
+    random.seed(seed)
     n = 10
     
     # Number of mines
@@ -331,12 +344,13 @@ if __name__ == "__main__":
                     accounted_flags.append(((row, col), (u_row, u_col)))
         
         for coords, dec_num in subsets:
-            if (row, col) in accounted_subsets:
+            if coords in accounted_subsets:
                 continue
             u_row, u_col = coords
             if type(mine_values[u_row][u_col]) is int and mine_values[u_row][u_col] > 0:
-                mine_values[u_row][u_col] -= 1
+                mine_values[u_row][u_col] -= dec_num
                 accounted_subsets.append(coords)
+                
 
             
         print_map(mine_values, n)
@@ -346,7 +360,7 @@ if __name__ == "__main__":
         print()
         print("Got input:" + inp)
         print()
-        sleep(0.2)
+        # sleep(0.1)
         # inp = input("Input your move:")
         i += 1
         if inp == "exit":
@@ -369,7 +383,7 @@ if __name__ == "__main__":
         # Flag input
         elif len(inp) == 3:
             if inp[2].lower() != 'f':
-                clear()
+                #clear()
                 print(incorrect_msg)
                 instructions()
                 continue
@@ -378,14 +392,14 @@ if __name__ == "__main__":
             try:
                 val = list(map(int, inp[:2]))
             except ValueError:
-                clear()
+                #clear()
                 print(incorrect_msg)
                 instructions()
                 continue
  
             # Sanity checks 
             if val[0] > n or val[0] < 1 or val[1] > n or val[1] < 1:
-                clear()
+                #clear()
                 print(incorrect_msg)
                 instructions()
                 continue
@@ -396,19 +410,19 @@ if __name__ == "__main__":
  
             # If cell already been flagged
             if [r, col] in flags:
-                clear()
+                #clear()
                 print("Flag already set")
                 continue
  
             # If cell already been displayed
             if mine_values[r][col] != ' ':
-                clear()
+                #clear()
                 print("Value already known")
                 continue
  
             # Check the number for flags    
             if len(flags) < n_mines:
-                clear()
+                #clear()
                 print("Flag set")
  
                 # Adding flag to the list
@@ -435,12 +449,12 @@ if __name__ == "__main__":
                 
                 continue
             else:
-                clear()
+                #clear()
                 print("Flags finished")
                 continue    
  
         else: 
-            clear()
+            #clear()
             print(incorrect_msg)   
             instructions()
             continue
@@ -448,7 +462,7 @@ if __name__ == "__main__":
  
         # Sanity checks
         if val[0] > n or val[0] < 1 or val[1] > n or val[1] < 1:
-            clear()
+            #clear()
             print(incorrect_msg)
             instructions()
             continue
@@ -466,7 +480,7 @@ if __name__ == "__main__":
             mine_values[row][col] = 'M'
             mine_values = show_mines(mine_values, numbers, n)
             print_map(mine_values, n)
-            print("Landed on a mine, ended up with an arrow to the knee... better luck next time")
+            print(f"Landed on a mine, ended up with an arrow to the knee... better luck next time\nIteration: {i}, seed {seed}")
             over = True
             continue
         # If selecting a cell with atleast 1 mine in neighboring cells  
@@ -484,7 +498,8 @@ if __name__ == "__main__":
                     
                 # removing "unopened" status of current square from adjascent squares
                 for u_row, u_col in u_pairs:
-                    unopeneds[u_row][u_col].remove((row, col))
+                    if (row, col) in unopeneds[u_row][u_col]:
+                        unopeneds[u_row][u_col].remove((row, col))
             
             
  
@@ -495,4 +510,4 @@ if __name__ == "__main__":
             print("You win, you deserve cookies!")
             over = True
             continue
-        clear()
+        #clear()
