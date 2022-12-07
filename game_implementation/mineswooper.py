@@ -1,4 +1,4 @@
-from itertools import permutations
+from itertools import permutations 
 import matplotlib.pyplot as plt
 from time import sleep
 from sys import platform
@@ -250,7 +250,8 @@ def solve(i, n, n_mines, mine_values, flags, unopeneds, vis, tovis):
     multiverse = {}
     
     # Brute force through remaining squares
-    for perm in tqdm(permutations(([-1]*mines_left) + ([0] * (len(tovis) - mines_left)))):
+    perms = set(permutations(([-1]*mines_left) + ([0] * (len(tovis) - mines_left))))
+    for perm in tqdm(perms):
         # Simulate mine placement
         hypothesis_world = [[0 for c in range(n)] for r in range(n)]
         for sq_id in range(len(tovis)):
@@ -261,11 +262,10 @@ def solve(i, n, n_mines, mine_values, flags, unopeneds, vis, tovis):
         
         try:
             for hypo_row, hypo_col in vis:
-                assert (hypothesis_world[hypo_row][hypo_col] >= 0) and \
-                    (hypothesis_world[hypo_row][hypo_col] == (
-                        mine_values[hypo_row][hypo_col] + \
-                        sum([1 if ((hypo_row, hypo_col) in contents) else 0 for contents in accounted_flags]))), \
-                "Inconsistent universe model"
+                p1 = hypothesis_world[hypo_row][hypo_col]
+                p2 = mine_values[hypo_row][hypo_col]
+                if type(p2) is int:
+                    assert p1 == p2, "Inconsistent universe model"
         except AssertionError as e:
             continue # skip permutation, since we noticed an inconsistency
         
@@ -287,7 +287,7 @@ if __name__ == "__main__":
     
     # Size of grid
     seed = random.randint(1, 10000)
-    # seed = 5601
+    # seed = 4938
     random.seed(seed)
     n = 10
     
